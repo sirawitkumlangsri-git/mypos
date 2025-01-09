@@ -4,6 +4,9 @@ import { mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parentPort, threadId } from 'node:worker_threads';
+import { PrismaClient } from 'file:///Users/sirawitkumlungsri/Desktop/Git/POS/node_modules/@prisma/client/default.js';
+import bcrypt from 'file:///Users/sirawitkumlungsri/Desktop/Git/POS/node_modules/bcryptjs/index.js';
+import jwt from 'file:///Users/sirawitkumlungsri/Desktop/Git/POS/node_modules/jsonwebtoken/index.js';
 import { getRequestDependencies, getPreloadLinks, getPrefetchLinks, createRenderer } from 'file:///Users/sirawitkumlungsri/Desktop/Git/POS/node_modules/vue-bundle-renderer/dist/runtime.mjs';
 import { stringify, uneval } from 'file:///Users/sirawitkumlungsri/Desktop/Git/POS/node_modules/devalue/index.js';
 import destr from 'file:///Users/sirawitkumlungsri/Desktop/Git/POS/node_modules/destr/dist/index.mjs';
@@ -270,9 +273,13 @@ const plugins = [
 _buZE7530te
 ];
 
+const _lazy_HfRGl2 = () => Promise.resolve().then(function () { return login_post$1; });
+const _lazy_8epxdv = () => Promise.resolve().then(function () { return register_post$1; });
 const _lazy_GCLLh3 = () => Promise.resolve().then(function () { return renderer$1; });
 
 const handlers = [
+  { route: '/api/auth/login', handler: _lazy_HfRGl2, lazy: true, middleware: false, method: "post" },
+  { route: '/api/auth/register', handler: _lazy_8epxdv, lazy: true, middleware: false, method: "post" },
   { route: '/__nuxt_error', handler: _lazy_GCLLh3, lazy: true, middleware: false, method: undefined },
   { route: '/**', handler: _lazy_GCLLh3, lazy: true, middleware: false, method: undefined }
 ];
@@ -1086,6 +1093,86 @@ const template$1 = (messages) => {
 const errorDev = /*#__PURE__*/Object.freeze({
   __proto__: null,
   template: template$1
+});
+
+const prisma$1 = new PrismaClient();
+const login_post = defineEventHandler(async (event) => {
+  const { email, password } = await readBody(event);
+  const user = await prisma$1.user.findUnique({
+    where: { email }
+  });
+  if (!user || !user.password) {
+    throw createError({
+      statusCode: 400,
+      message: "User not found or invalid data."
+    });
+  }
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+  if (!isPasswordValid) {
+    throw createError({
+      statusCode: 400,
+      message: "Invalid credentials."
+    });
+  }
+  const token = jwt.sign({ userId: user.id }, "your_secret_key", { expiresIn: "1h" });
+  return {
+    message: "Login successful",
+    token,
+    user: {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      uuid: user.uuid,
+      firstname: user.firstname,
+      lastname: user.lastname
+    }
+  };
+});
+
+const login_post$1 = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  default: login_post
+});
+
+const prisma = new PrismaClient();
+const register_post = defineEventHandler(async (event) => {
+  const { email, password, firstname, lastname } = await readBody(event);
+  const existingUser = await prisma.user.findUnique({
+    where: { email }
+  });
+  if (existingUser) {
+    throw createError({
+      statusCode: 400,
+      message: "User already exists."
+    });
+  }
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const lastUser = await prisma.user.findFirst({
+    orderBy: { id: "desc" }
+  });
+  let newUuid = "M0001";
+  if (lastUser) {
+    const lastUuidNumber = parseInt(lastUser.uuid.substring(1), 10);
+    newUuid = `M${String(lastUuidNumber + 1).padStart(4, "0")}`;
+  }
+  const newUser = await prisma.user.create({
+    data: {
+      email,
+      uuid: newUuid,
+      password: hashedPassword,
+      firstname,
+      lastname
+    }
+  });
+  return {
+    message: "User registered successfully",
+    user: newUser
+  };
+});
+
+const register_post$1 = /*#__PURE__*/Object.freeze({
+  __proto__: null,
+  default: register_post
 });
 
 const Vue3 = version[0] === "3";
